@@ -1,0 +1,10 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const C=require('./risk-core.js');
+const row={id:'r1',asset:'Database',threat:'Loss of backup',owner:'DBA',likelihood:3,impact:5,treatment:'Restore drill',status:'open'};
+test('all 25 matrix positions use likelihood × impact',()=>{for(let l=1;l<=5;l++)for(let i=1;i<=5;i++)assert.equal(C.score(l,i),l*i);});
+test('severity boundaries are explicit',()=>{for(const [n,level] of [[1,'low'],[4,'low'],[5,'medium'],[9,'medium'],[10,'high'],[14,'high'],[15,'critical'],[25,'critical']])assert.equal(C.level(n),level);});
+test('ratings reject coercion, out-of-range and fractional input',()=>{for(const n of [0,6,-1,1.5,'3',NaN,null])assert.throws(()=>C.score(n,3));});
+test('backup roundtrip validates and preserves multilingual data',()=>{const rows=[{...row,asset:'اوراکل'}];assert.deepEqual(C.parseBackup(JSON.stringify({version:1,risks:rows})),rows);});
+test('backup rejects duplicate ids, unsupported versions and invalid rows',()=>{for(const data of [{version:2,risks:[]},{version:1,risks:[row,row]},{version:1,risks:[{...row,owner:' '}]},{version:1,risks:[{...row,status:'unknown'}]},{version:1,risks:[{...row,likelihood:10}]}])assert.throws(()=>C.parseBackup(JSON.stringify(data)));});
+test('CSV escapes quotes, newlines and spreadsheet formulas',()=>{const csv=C.csv([{...row,asset:' \t=HYPERLINK("bad")',threat:'a,"b"\nc',owner:'+SUM(A1)',treatment:'@test'}]);assert.ok(csv.startsWith('\uFEFF'));assert.ok(csv.includes('"\' \t=HYPERLINK(""bad"")"'));assert.ok(csv.includes('"a,""b""\nc"'));assert.ok(csv.includes('"\'+SUM(A1)"'));assert.ok(csv.includes('"\'@test"'));});
